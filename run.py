@@ -67,6 +67,19 @@ if __name__ == '__main__':
         raw_image = cv2.imread(filename)
         image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB) / 255.0
         
+        # ImageNet mean and std
+        #mean = np.array([0.485, 0.456, 0.406])
+        #std = np.array([0.229, 0.224, 0.225])
+
+        # Normalize the image
+        # Reshape mean and std to be compatible with image dimensions for broadcasting
+        #mean = mean.reshape(1, 1, 3)
+        #std = std.reshape(1, 1, 3)
+
+        # Normalize the image
+        #normalized_image = (image - mean) / std
+        #image = normalized_image
+        
         h, w = image.shape[:2]
         
         image = transform({'image': image})['image']
@@ -75,7 +88,10 @@ if __name__ == '__main__':
         with torch.no_grad():
             depth = depth_anything(image)
         
-        depth = F.interpolate(depth[None], (h, w), mode='bilinear', align_corners=False)[0, 0]
+        net_w = net_h = 384
+        depth_npz = F.interpolate(depth[None], (net_h, net_w), mode='bilinear', align_corners=False)[0]
+        #depth = F.interpolate(depth[None], (h, w), mode='bilinear', align_corners=False)[0, 0]
+        depth = depth_npz[0]
         depth = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
         
         depth = depth.cpu().numpy().astype(np.uint8)
@@ -89,6 +105,9 @@ if __name__ == '__main__':
         
         if args.pred_only:
             cv2.imwrite(os.path.join(args.outdir, filename[:filename.rfind('.')] + '_depth.png'), depth)
+            
+            np.savez(os.path.join(args.outdir, 'depth_{}.npz'.format(filename[:filename.rfind('.')])), pred=depth_npz.cpu().numpy())
+            
         else:
             split_region = np.ones((raw_image.shape[0], margin_width, 3), dtype=np.uint8) * 255
             combined_results = cv2.hconcat([raw_image, split_region, depth])
